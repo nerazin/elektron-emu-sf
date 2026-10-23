@@ -1,0 +1,63 @@
+diff --git a/src/mac.m b/src/mac.m
+index 977cd7e..608f88a 100644
+--- a/src/mac.m
++++ b/src/mac.m
+@@ -14,6 +14,8 @@
+
+ #import <Cocoa/Cocoa.h>
+
++#include <IOKit/hidsystem/IOLLEvent.h>
++
+ #include <mach/mach_time.h>
+
+ #include <stdint.h>
+@@ -842,34 +844,32 @@ handleCrossing(PuglWrapperView* view, NSEvent* event, const PuglEventType type)
+   }
+ }
+
+-static bool
+-flagDiffers(const uint32_t lhs, const uint32_t rhs, const uint32_t mask)
+-{
+-  return (lhs & mask) != (rhs & mask);
+-}
+-
+ - (void)flagsChanged:(NSEvent*)event
+ {
+   const uint32_t mods    = getModifiers(event);
+   PuglKey        special = PUGL_KEY_NONE;
++  NSEventModifierFlags mask = 0;
+
+   const uint16_t keyCode = [event keyCode];
+-  if (flagDiffers(mods, puglview->impl->mods, PUGL_MOD_SHIFT)) {
+-    special = (keyCode == 0x3C) ? PUGL_KEY_SHIFT_R : PUGL_KEY_SHIFT_L;
+-  } else if (flagDiffers(mods, puglview->impl->mods, PUGL_MOD_CTRL)) {
+-    special = (keyCode == 0x3E) ? PUGL_KEY_CTRL_R : PUGL_KEY_CTRL_L;
+-  } else if (flagDiffers(mods, puglview->impl->mods, PUGL_MOD_ALT)) {
+-    special = (keyCode == 0x3D) ? PUGL_KEY_ALT_R : PUGL_KEY_ALT_L;
+-  } else if (flagDiffers(mods, puglview->impl->mods, PUGL_MOD_SUPER)) {
+-    special = PUGL_KEY_SUPER_L; // Left and right command are identical
+-  } else if (flagDiffers(mods, puglview->impl->mods, PUGL_MOD_CAPS_LOCK)) {
+-    special = PUGL_KEY_CAPS_LOCK;
++  // flagsChanged is neither keyDown nor keyUp. Use the changed physical key's
++  // device flag so both sides work independently when held at the same time.
++  switch (keyCode) {
++  case 0x38: special = PUGL_KEY_SHIFT_L;   mask = NX_DEVICELSHIFTKEYMASK; break;
++  case 0x3C: special = PUGL_KEY_SHIFT_R;   mask = NX_DEVICERSHIFTKEYMASK; break;
++  case 0x3B: special = PUGL_KEY_CTRL_L;    mask = NX_DEVICELCTLKEYMASK;   break;
++  case 0x3E: special = PUGL_KEY_CTRL_R;    mask = NX_DEVICERCTLKEYMASK;   break;
++  case 0x3A: special = PUGL_KEY_ALT_L;     mask = NX_DEVICELALTKEYMASK;   break;
++  case 0x3D: special = PUGL_KEY_ALT_R;     mask = NX_DEVICERALTKEYMASK;   break;
++  case 0x37: special = PUGL_KEY_SUPER_L;   mask = NX_DEVICELCMDKEYMASK;   break;
++  case 0x36: special = PUGL_KEY_SUPER_R;   mask = NX_DEVICERCMDKEYMASK;   break;
++  case 0x39: special = PUGL_KEY_CAPS_LOCK; mask = NX_ALPHASHIFTMASK;     break;
++  default: break;
+   }
+
+   if (special != 0) {
+     const NSPoint wloc    = [self eventLocation:event];
+     const NSPoint rloc    = [NSEvent mouseLocation];
+-    const bool    release = [event type] == NSEventTypeKeyUp;
++    const bool    release = !([event modifierFlags] & mask);
+
+     const PuglKeyEvent ev = {release ? PUGL_KEY_RELEASE : PUGL_KEY_PRESS,
+                              0U,

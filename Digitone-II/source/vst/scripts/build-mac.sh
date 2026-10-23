@@ -48,6 +48,12 @@ if ! git -C "$work/dpf" apply -R --check "$root/vst/patches/dpf-offline.patch" 2
   git -C "$work/dpf" checkout --quiet -- .
   git -C "$work/dpf" apply "$root/vst/patches/dpf-offline.patch"
 fi
+# Il DPF fissato sopra non invia i rilasci Option da flagsChanged: FUNC restava giu'.
+# Pugl e' un sottomodulo: la patch si applica al suo albero, non a quello di DPF.
+pugl=$work/dpf/dgl/src/pugl-upstream
+if ! git -C "$pugl" apply -R --check "$root/vst/patches/pugl-mac-modifiers.patch" 2>/dev/null; then
+  git -C "$pugl" apply "$root/vst/patches/pugl-mac-modifiers.patch"
+fi
 
 build=$work/mac/vst-build
 mkdir -p "$work/mac"

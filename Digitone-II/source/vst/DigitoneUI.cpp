@@ -16,6 +16,7 @@
 #include "DriveModel.hpp"
 #include "Strings.hpp"
 #include "panel_layout.hpp"
+#include "DigitoneInput.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -168,10 +169,19 @@ public:
         addIdleCallback(this, 40);
     }
 
-    ~DigitoneUI() override { removeIdleCallback(this); }
+    ~DigitoneUI() override
+    {
+        removeIdleCallback(this);
+        releaseInputs();
+    }
 
 protected:
     // ------------------------------------------------------------ host
+    void uiFocus(bool focus, CrossingMode) override
+    {
+        if (!focus) { releaseInputs(); repaint(); }
+    }
+
     void parameterChanged(uint32_t index, float value) override
     {
         if (index == DigitonePlugin::kParamVolume) { fVolume = value; repaint(); }
@@ -223,12 +233,23 @@ protected:
         // contorni dei tasti premuti e di FUNC/TRK agganciati
         for (const auto& k : dtl::kKeys) {
             const bool latched = fLatched.count(k.code) != 0;
-            const bool pressed = fDown.kind == 0 && fDown.active && fDown.code == k.code;
+            const bool pressed = fInput.isDown(k.code);
             if (!latched && !pressed) continue;
             const auto& c = latched ? dtl::kOutlineLatched : dtl::kOutlinePressed;
             const float hw = int(k.w) / 2, hh = int(k.h) / 2;
             beginPath();
             rect(px(k.x - hw), py(k.y - hh), 2 * hw * fS, 2 * hh * fS);
+            strokeColor(Color(c.r, c.g, c.b));
+            strokeWidth(std::max(1.0f, dtl::kOutlineWidth * fS));
+            stroke();
+        }
+        // Come il data encoder di Model:Cycles: anche gli encoder premuti hanno
+        // un contorno, per tutta la durata della pressione da tastiera.
+        for (const auto& e : dtl::kEncoders) {
+            if (!fInput.isDown(e.push)) continue;
+            const auto& c = dtl::kOutlinePressed;
+            beginPath();
+            circle(px(e.x), py(e.y), (e.r + 1.5f) * fS);
             strokeColor(Color(c.r, c.g, c.b));
             strokeWidth(std::max(1.0f, dtl::kOutlineWidth * fS));
             stroke();
@@ -264,46 +285,31 @@ protected:
     bool onMouse(const MouseEvent& ev) override
     {
         if (ev.button != 1) return false;
+        // Si rilascia il controllo iniziale anche sopra il +DRIVE o fuori pannello.
+        if (!ev.press) return releaseMouse();
         const float x = ev.pos.getX(), y = ev.pos.getY();
         if (x >= areaW()) {                                // linguetta e +DRIVE
-            if (ev.press) driveClick(x, y, (ev.mod & kModifierControl) || (ev.mod & kModifierSuper));
+            driveClick(x, y, (ev.mod & kModifierControl) || (ev.mod & kModifierSuper));
             return true;
         }
-        if (ev.press) {
-            if (overlayClick(x, y)) return true;
-            const int z = zoomHit(x, y);
-            if (z >= 0) { zoomTo(kZooms[z], true); return true; }
-            if (gripHit(x, y)) { fGrip = true; fGripX = x; fGripW = areaW(); return true; }
-            const float qx = (x - fOffX) / fS, qy = (y - fOffY) / fS;
-            Hit h = hit(qx, qy);
-            fDown = h;
-            if (!h.active) return false;
-            if (h.kind == 0) {
-                if (isLatching(h.code)) {
-                    if (fLatched.count(h.code)) { fLatched.erase(h.code); send(1, h.code); }
-                    else { fLatched.insert(h.code); send(0, h.code); }
-                } else {
-                    send(0, h.code);
-                }
+        if (overlayClick(x, y)) return true;
+        const int z = zoomHit(x, y);
+        if (z >= 0) { zoomTo(kZooms[z], true); return true; }
+        if (gripHit(x, y)) { fGrip = true; fGripX = x; fGripW = areaW(); return true; }
+        const float qx = (x - fOffX) / fS, qy = (y - fOffY) / fS;
+        Hit h = hit(qx, qy);
+        fDown = h;
+        if (!h.active) return false;
+        fReleaseLatchedAt = 0;
+        if (h.kind == 0) {
+            if (isLatching(h.code) && (fLatched.empty() || fLatched.count(h.code))) {
+                if (fLatched.erase(h.code)) release(dnui::PanelInput::Latch, h.code);
+                else { fLatched.insert(h.code); press(dnui::PanelInput::Latch, h.code, h.code); }
             } else {
-                fDragY = qy; fDragT = nowMs(); fDragMoved = false; fDragAcc = 0;
+                press(dnui::PanelInput::Mouse, 0, h.code);
             }
-            repaint();
-            return true;
-        }
-        // rilascio
-        if (fGrip) { fGrip = false; saveZoom(currentZoom()); return true; }
-        if (!fDown.active) return false;
-        const Hit d = fDown;
-        fDown.active = false;
-        if (d.kind == 0) {
-            if (!isLatching(d.code)) {
-                send(1, d.code);
-                if (!fLatched.empty()) fReleaseLatchedAt = nowMs() + dtl::kAutoReleaseMs;
-            }
-        } else if (d.kind == 1 && !fDragMoved) {
-            send(0, d.push);
-            fPushRelease.push_back({nowMs() + dtl::kPushReleaseMs, d.push});
+        } else {
+            fDragY = qy; fDragT = nowMs(); fDragMoved = false; fDragAcc = 0;
         }
         repaint();
         return true;
@@ -363,14 +369,27 @@ protected:
         return true;
     }
 
-    // GUI v2: Cmd/Ctrl+S salva la sessione adesso (qui: la macchina unica sul disco)
+    // Stesso schema della Syntakt: press/release reali e niente autorepeat.
     bool onKeyboard(const KeyboardEvent& ev) override
     {
+        // GUI v2: Cmd/Ctrl+S salva la sessione adesso.
         if (ev.press && (ev.key == 's' || ev.key == 'S') && (ev.mod & (kModifierControl | kModifierSuper))) {
             if (fPlugin) fPlugin->saveNow();
             return true;
         }
-        return false;
+        if (ev.key == kKeyEscape && !(ev.mod & (kModifierControl | kModifierSuper))) {
+            if (ev.press) { releaseInputs(); repaint(); }
+            return true;
+        }
+        if (ev.press && fEngine.kind != EngineStatus::Running) return false;
+        const bool handled = fInput.keyboard(ev.press, ev.key, ev.keycode, ev.mod,
+            [this](int kind, int code) { send(kind, code); });
+        if (handled) {
+            if (ev.press) fReleaseLatchedAt = 0;
+            else if (!fLatched.empty()) fReleaseLatchedAt = nowMs() + dtl::kAutoReleaseMs;
+            repaint();
+        }
+        return handled;
     }
 
     void uiFileBrowserSelected(const char* filename) override
@@ -391,13 +410,16 @@ protected:
         if (v != fVersion) { fVersion = v; fScreenDirty = true; dirty = true; }
         if (fReleaseLatchedAt > 0 && t >= fReleaseLatchedAt) {
             fReleaseLatchedAt = 0;
-            for (int c : fLatched) send(1, c);
+            for (int c : fLatched) release(dnui::PanelInput::Latch, c);
             fLatched.clear();
             dirty = true;
         }
-        for (size_t i = 0; i < fPushRelease.size();) {
-            if (t >= fPushRelease[i].first) { send(1, fPushRelease[i].second); fPushRelease.erase(fPushRelease.begin() + i); }
-            else ++i;
+        for (auto it = fPushRelease.begin(); it != fPushRelease.end();) {
+            if (t >= it->second) {
+                release(dnui::PanelInput::Encoder, it->first);
+                it = fPushRelease.erase(it);
+                dirty = true;
+            } else ++it;
         }
         if (fVolShowUntil > 0 && t >= fVolShowUntil) { fVolShowUntil = 0; dirty = true; }
         const EngineStatus es = fPlugin->status();
@@ -411,6 +433,10 @@ protected:
         if (es.kind != fEngine.kind || es.firmwareDir != fEngine.firmwareDir || es.warning != fEngine.warning ||
             es.percent != fEngine.percent || es.detail != fEngine.detail || (es.kind == EngineStatus::Booting && int(es.bootSeconds) != int(fEngine.bootSeconds)))
             dirty = true;
+        if (fEngine.kind == EngineStatus::Running && es.kind != EngineStatus::Running) {
+            releaseInputs();
+            dirty = true;
+        }
         fEngine = es;
         if (fDriveOpen && fDrive) {
             const uint64_t dv = fDrive->snapshot().version;
@@ -506,6 +532,47 @@ private:
     void send(int kind, int code, int arg = 0)
     {
         if (fPlugin) fPlugin->panel(kind, code, arg);
+    }
+
+    void press(dnui::PanelInput::Source source, unsigned id, int code)
+    {
+        fInput.press(source, id, code, [this](int kind, int c) { send(kind, c); });
+    }
+
+    bool release(dnui::PanelInput::Source source, unsigned id)
+    {
+        return fInput.release(source, id, [this](int kind, int c) { send(kind, c); });
+    }
+
+    void releaseInputs()
+    {
+        fInput.releaseAll([this](int kind, int code) { send(kind, code); });
+        fLatched.clear();
+        fPushRelease.clear();
+        fReleaseLatchedAt = 0;
+        fDown.active = false;
+        fGrip = false;
+    }
+
+    bool releaseMouse()
+    {
+        if (fGrip) { fGrip = false; saveZoom(currentZoom()); return true; }
+        if (!fDown.active) return false;
+        const Hit d = fDown;
+        fDown.active = false;
+        if (d.kind == 0) {
+            if (release(dnui::PanelInput::Mouse, 0) && !fLatched.empty())
+                fReleaseLatchedAt = nowMs() + dtl::kAutoReleaseMs;
+        } else if (d.kind == 1) {
+            if (!fDragMoved) {
+                press(dnui::PanelInput::Encoder, d.push, d.push);
+                fPushRelease[d.push] = nowMs() + dtl::kPushReleaseMs;
+            }
+            if (!fLatched.empty())
+                fReleaseLatchedAt = nowMs() + dtl::kPushReleaseMs + dtl::kAutoReleaseMs;
+        }
+        repaint();
+        return true;
     }
 
     void turn(int code, int steps)
@@ -1286,11 +1353,12 @@ private:
     float fS = 0, fOffX = 0, fOffY = 0, fStatusH = 22;
     double fVolume = 0.25, fVolShowUntil = 0;
     std::set<int> fLatched;
+    dnui::PanelInput fInput;
     Hit fDown;
     double fDragY = 0, fDragT = 0, fDragAcc = 0;
     bool fDragMoved = false, fHand = false;
     double fReleaseLatchedAt = 0;
-    std::vector<std::pair<double, int>> fPushRelease;
+    std::map<int, double> fPushRelease;
     bool fGrip = false;
     float fGripX = 0, fGripW = 0;
     std::string fStatus, fNote;

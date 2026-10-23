@@ -28,6 +28,7 @@ def main(src, out):
     w("struct Enc { int turn, push; float x, y, r; };")
     w("struct LedMap { int led, code; };")
     w("struct LedColor { int code; RGB c; };")
+    w("struct KeyBinding { const char* name; int code; };")
     w("static const float kPanelW = %r, kPanelH = %r;" % tuple(float(v) for v in j["panel"]))
     w("static const RGB kBackground = %s;" % rgb(j["background"]))
     ph = j.get("photo")
@@ -82,6 +83,11 @@ def main(src, out):
       % (i["wheel_gain"], i["wheel_clamp"], i["shift_mult"], i["turn_clamp"]))
     w("static const int kAutoReleaseMs = %d, kPushReleaseMs = %d;" % (i["auto_release_ms"], i["push_release_ms"]))
     w("static const int kLatching[] = {%s};" % ", ".join(str(c) for c in i["latching"]))
+    # Come la Syntakt: il layout condiviso contiene anche i tasti del computer.
+    w("static const KeyBinding kKeyboard[] = {")
+    for name, code in sorted(j["keyboard"].items()):
+        w("    {%s, %d}," % (json.dumps(name), code))
+    w("};")
     w("static const float kMinScale = %r;" % float(j["window"]["min_scale"]))
     w("static const RGB kStatusColor = %s;" % rgb(j["status_color"]))
     w("} // namespace dtl")
