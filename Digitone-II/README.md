@@ -45,7 +45,7 @@ Give the plug-in window keyboard focus. The layout follows Syntakt's trigger row
 | `F1` / `F2` / `F3` / `F4` | TRIG / SYN / FLTR / AMP parameter page |
 | `F5` / `F6` | MOD / FX parameter page (LFO / FX positions on Syntakt) |
 | `F7` / `F8` | TEMPO / SETTINGS |
-| `F9` / `F10` | PERFORM / UNISON |
+| `F9` / `F10` | PRESET/KIT / VOICE SETUP |
 | `F11` / `F12` | ARPEGGIATOR / NOTE EDIT |
 | `+` or `=` / `-` | TRANSPOSE+ / TRANSPOSE− |
 | `Z X C V B N M ,` | Push encoders A–H |
@@ -54,6 +54,8 @@ Give the plug-in window keyboard focus. The layout follows Syntakt's trigger row
 | `Cmd+S` / `Ctrl+S` | Save the emulated machine immediately |
 
 `R` remains TRIG 12, so RECORD uses `J`. To copy, clear or paste, hold Option/Alt and press `J`, `Space` or `.` respectively. Turn encoders and Main Volume by dragging or scrolling the mouse as before; Shift speeds up encoder scrolling. On keyboards with media-function keys, you may need `Fn` for F1–F12. Other Ctrl/Cmd combinations are left to the host, including Ctrl+number desktop switching.
+
+Hold Option/Alt and press `F9` for PERFORM KIT, or `F10` to toggle UNISON. The standalone keys open PRESET/KIT and VOICE SETUP respectively.
 
 Keyboard, mouse and mouse-latched presses are tracked independently: a mouse release or latch timeout cannot release a button still held on the keyboard. Leaving the plug-in window, closing its UI, or pressing Escape releases all inputs to prevent stuck buttons. Keyboard controls activate once the engine is running.
 
