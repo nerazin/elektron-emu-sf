@@ -2,7 +2,7 @@
 // Nessun timer per la tastiera: una pressione dura fino al suo rilascio fisico.
 #pragma once
 
-#include "dgl/Base.hpp"
+#include "Base.hpp"
 #include "panel_layout.hpp"
 
 #include <cstring>

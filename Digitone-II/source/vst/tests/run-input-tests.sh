@@ -8,5 +8,5 @@ build=$(mktemp -d)
 trap 'rm -rf "$build"' EXIT
 python3 "$root/scripts/gen-layout.py" "$root/../core/layout/digitone2_panel.json" "$build/panel_layout.hpp"
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror ${CXXFLAGS:-} \
-    -I"$DPF_ROOT" -I"$root" -I"$build" "$root/tests/input.cpp" -o "$build/input-tests"
+    -I"$DPF_ROOT/dgl" -I"$root" -I"$build" "$root/tests/input.cpp" -o "$build/input-tests"
 "$build/input-tests"
