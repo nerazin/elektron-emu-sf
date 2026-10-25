@@ -70,3 +70,11 @@ The Mac build script also applies `source/vst/patches/pugl-mac-modifiers.patch` 
 ## Known limits
 
 If the compiler is not available it falls back to a slow interpreter (about 0.5x real time): offline rendering works (in Ableton, Export Audio or Freeze) but live playback stays silent and shows a warning. macOS builds are Apple Silicon only and a few +Drive error messages are still in Italian.
+
+## TODOs to make for this fork
+
+- Smoother knobs
+- Smoother knob rotation with scrolling
+- Probably reverse knob rotation based on the scrolling direction in macos settings, so that swiping up on the trackpad would turn a knob clockwise
+- Visible indication of saving the state of the machine
+- Probably restoring different states for different projects in a DAW
