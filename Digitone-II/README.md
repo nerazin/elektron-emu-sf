@@ -73,7 +73,7 @@ If the compiler is not available it falls back to a slow interpreter (about 0.5x
 
 ## TODOs to make for this fork
 
-- Smoother knobs
+- Smoother knobs - recording step locks isn't convenient with the current behaviour. This might be not a simple task as it might involve some kind of a polling rate of sending signals to the emulation
 - Smoother knob rotation with scrolling
 - Probably reverse knob rotation based on the scrolling direction in macos settings, so that swiping up on the trackpad would turn a knob clockwise
 - Visible indication of saving the state of the machine
